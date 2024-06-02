@@ -1,5 +1,7 @@
 const express = require('express');
 const mysql = require('mysql2');
+const multer = require('multer');
+const { Storage } = require('@google-cloud/storage');
 require('dotenv').config();
 
 const app = express();
@@ -15,6 +17,14 @@ const db = mysql.createConnection({
 db.connect(err => {
   if (err) throw err;
   console.log('Connected to database');
+});
+
+const storage = new Storage();
+const bucketName = process.env.GCLOUD_STORAGE_BUCKET;
+const bucket = storage.bucket(bucketName);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
 });
 
 app.get('/products', (req, res) => {
@@ -58,6 +68,86 @@ app.delete('/products/:id', (req, res) => {
   db.query('DELETE FROM products WHERE productID = ?', [id], (err, result) => {
     if (err) throw err;
     res.send('Product deleted');
+  });
+});
+
+app.get('/product-images', (req, res) => {
+  db.query('SELECT * FROM productImage', (err, results) => {
+    if (err) throw err;
+    res.json(results);
+  });
+});
+
+app.get('/product-images/:id', (req, res) => {
+  const { id } = req.params;
+  db.query('SELECT * FROM productImage WHERE productID = ?', [id], (err, result) => {
+    if (err) throw err;
+    res.json(result);
+  });
+});
+
+app.post('/product-images', upload.single('image'), (req, res) => {
+  const { productID } = req.body;
+  const file = req.file;
+  const blob = bucket.file(file.originalname);
+  const blobStream = blob.createWriteStream();
+
+  blobStream.on('error', err => {
+    res.status(500).send(err);
+  });
+
+  blobStream.on('finish', () => {
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${blob.name}`;
+    db.query('INSERT INTO productImage (productID, imageURL) VALUES (?, ?)', [productID, publicUrl], (err, result) => {
+      if (err) throw err;
+      res.json({ id: result.insertId, imageURL: publicUrl });
+    });
+  });
+
+  blobStream.end(file.buffer);
+});
+
+app.put('/product-images/:id', upload.single('image'), (req, res) => {
+  const { id } = req.params;
+  const { productID } = req.body;
+  const file = req.file;
+  const blob = bucket.file(file.originalname);
+  const blobStream = blob.createWriteStream();
+
+  blobStream.on('error', err => {
+    res.status(500).send(err);
+  });
+
+  blobStream.on('finish', () => {
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${blob.name}`;
+    db.query('UPDATE productImage SET productID = ?, imageURL = ? WHERE productID = ?', [productID, publicUrl, id], (err, result) => {
+      if (err) throw err;
+      res.send('Product image updated');
+    });
+  });
+
+  blobStream.end(file.buffer);
+});
+
+app.delete('/product-images/:id', (req, res) => {
+  const { id } = req.params;
+  db.query('SELECT imageURL FROM productImage WHERE productID = ?', [id], (err, result) => {
+    if (err) throw err;
+    const imageUrl = result[0].imageURL;
+    const fileName = imageUrl.split('/').pop();
+    const file = bucket.file(fileName);
+
+    file.delete(err => {
+      if (err) {
+        res.status(500).send(err);
+        return;
+      }
+
+      db.query('DELETE FROM productImage WHERE productID = ?', [id], (err, result) => {
+        if (err) throw err;
+        res.send('Product image deleted');
+      });
+    });
   });
 });
 
