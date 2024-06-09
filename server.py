@@ -20,6 +20,47 @@ storage_client = storage.Client()
 bucket_name = os.getenv('GCLOUD_STORAGE_BUCKET')
 bucket = storage_client.bucket(bucket_name)
 
+@app.route('/signup', methods=['POST'])
+def signup():
+    try:
+        id_token = request.json.get('id_token')
+        decoded_token = auth.verify_id_token(id_token)
+        uid = decoded_token['uid']
+        email = decoded_token['email']
+        name = request.json.get('name')
+        user_name = request.json.get('user_name')
+
+        user_data = {
+            'firebaseUID': uid,
+            'userName': user_name,
+            'name': name,
+            'email': email
+        }
+
+        user_ref = db.collection('users').document(uid)
+        user_ref.set(user_data)
+
+        return jsonify({'message': 'User signed up successfully', 'user': user_data}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        id_token = request.json.get('id_token')
+        decoded_token = auth.verify_id_token(id_token)
+        uid = decoded_token['uid']
+
+        user_ref = db.collection('users').document(uid)
+        user_doc = user_ref.get()
+        
+        if user_doc.exists:
+            return jsonify({'message': 'Login successful', 'user': user_doc.to_dict()}), 200
+        else:
+            return jsonify({'error': 'User not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
 @app.route('/products', methods=['GET'])
 def get_products():
     products_ref = db.collection('products')
