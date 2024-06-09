@@ -1,0 +1,39 @@
+name: Deploy to Google Cloud
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v0.9.0
+      with:
+        project_id: ${{ secrets.GCLOUD_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCLOUD_CREDENTIALS }}
+
+    - name: Authenticate to Google Cloud
+      run: |
+        echo ${{ secrets.GCLOUD_CREDENTIALS }} | base64 --decode > $HOME/gcloud.json
+        gcloud auth activate-service-account --key-file=$HOME/gcloud.json
+
+    - name: Set environment variables
+      run: |
+        echo "GCLOUD_STORAGE_BUCKET=${{ secrets.GCLOUD_STORAGE_BUCKET }}" >> $GITHUB_ENV
+        echo "PORT=${{ secrets.PORT }}" >> $GITHUB_ENV
+        echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud.json" >> $GITHUB_ENV
+
+    - name: Deploy to App Engine
+      run: |
+        gcloud app deploy --quiet
+
+    - name: Clean up
+      run: |
+        rm $HOME/gcloud.json
