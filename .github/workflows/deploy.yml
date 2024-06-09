@@ -11,19 +11,17 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCLOUD_CREDENTIALS }}
 
     - name: Set up Google Cloud SDK
       uses: google-github-actions/setup-gcloud@v1
       with:
         project_id: ${{ secrets.GCLOUD_PROJECT_ID }}
-        service_account_key: ${{ secrets.GCLOUD_CREDENTIALS }}
-
-    - name: Authenticate to Google Cloud
-      run: |
-        echo ${{ secrets.GCLOUD_CREDENTIALS }} | base64 --decode > $HOME/gcloud.json
-        gcloud auth activate-service-account --key-file=$HOME/gcloud.json
-        gcloud config set project ${{ secrets.GCLOUD_PROJECT_ID }}
 
     - name: Set environment variables
       run: |
