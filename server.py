@@ -130,7 +130,7 @@ def upload_product_image():
     }
 
     image_ref = db.collection('productImages').add(image_data)
-    return jsonify({'id': image_ref[1].id, 'imageURL': public_url})
+    return jsonify({'id': image_ref[1].id, 'imageURL': public_url}) 
 
 @app.route('/product-images/<string:id>', methods=['PUT'])
 def update_product_image(id):
