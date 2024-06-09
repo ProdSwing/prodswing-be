@@ -29,6 +29,10 @@ jobs:
         echo "PORT=${{ secrets.PORT }}" >> $GITHUB_ENV
         echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud.json" >> $GITHUB_ENV
 
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
     - name: Validate gcloud setup
       run: |
         gcloud info
