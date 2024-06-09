@@ -46,4 +46,4 @@ jobs:
 
     - name: Clean up
       run: |
-        rm $HOME/gcloud.json
+        if [ -f $HOME/gcloud.json ]; then rm $HOME/gcloud.json; fi
