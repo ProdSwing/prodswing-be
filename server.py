@@ -4,7 +4,7 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 import os
 
-load_dotenv() 
+load_dotenv()
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads/'
