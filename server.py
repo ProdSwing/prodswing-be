@@ -165,6 +165,38 @@ def delete_product_image(id):
         blob.delete()
     return 'Product image deleted', 200
 
+results = [
+    {"name": "McDonalds", "category": "Food", "result": "Positive"},
+    {"name": "KFC", "category": "Food", "result": "Positive"},
+    {"name": "Jolibee", "category": "Food", "result": "Positive"},
+    {"name": "Chitato", "category": "Food", "result": "Positive"},
+    {"name": "Doritos", "category": "Food", "result": "Positive"},
+    {"name": "Moisturizer", "category": "Skincare", "result": "Positive"},
+    {"name": "Sunscreen", "category": "Skincare", "result": "Positive"},
+    {"name": "Toner", "category": "Skincare", "result": "Positive"},
+    {"name": "Cleanser", "category": "Skincare", "result": "Positive"},
+    {"name": "Serum", "category": "Skincare", "result": "Positive"},
+    {"name": "Iphone", "category": "Electronic", "result": "Positive"},
+    {"name": "Oppo", "category": "Electronic", "result": "Positive"},
+    {"name": "Xiaomi", "category": "Electronic", "result": "Positive"},
+    {"name": "Vivo", "category": "Electronic", "result": "Positive"},
+    {"name": "Lenovo", "category": "Electronic", "result": "Positive"},
+    {"name": "HnM", "category": "Fashion", "result": "Positive"},
+    {"name": "Uniqlo", "category": "Fashion", "result": "Positive"},
+    {"name": "Lacoste", "category": "Fashion", "result": "Positive"},
+    {"name": "Adidas", "category": "Fashion", "result": "Positive"},
+    {"name": "Nike", "category": "Fashion", "result": "Positive"},
+]
+
+@app.route('/results', methods=['GET'])
+def get_results():
+    return jsonify(results)
+
+@app.route('/results/<string:id>', methods=['GET'])
+def get_results_category(id):
+    filtered_results = [result for result in results if result['category'] == id]
+    return jsonify(filtered_results)
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 3000))
     app.run(host='0.0.0.0', port=port)
