@@ -1,12 +1,20 @@
+from datetime import datetime, timedelta
+import subprocess
 from flask import Flask, request, jsonify
 from google.cloud import firestore, storage
+import numpy as np
+import pandas as pd
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 import os
+from apscheduler.schedulers.background import BackgroundScheduler
+from model_loader import loaded_model, load_model_from_gcs
+from query_model import analyze
 
-load_dotenv() 
+load_dotenv()
 
 app = Flask(__name__)
+
 app.config['UPLOAD_FOLDER'] = 'uploads/'
 
 # Explicitly set the project ID from the environment variable
@@ -53,7 +61,7 @@ def login():
 
         user_ref = db.collection('users').document(uid)
         user_doc = user_ref.get()
-        
+
         if user_doc.exists:
             return jsonify({'message': 'Login successful', 'user': user_doc.to_dict()}), 200
         else:
@@ -73,7 +81,7 @@ def get_product(product_id):
     products_ref = db.collection('products')
     query_ref = products_ref.where('productID', '==', product_id).stream()
     products = [doc.to_dict() for doc in query_ref]
-    
+
     if products:
         return jsonify(products[0])
     else:
@@ -130,7 +138,7 @@ def upload_product_image():
     }
 
     image_ref = db.collection('productImages').add(image_data)
-    return jsonify({'id': image_ref[1].id, 'imageURL': public_url}) 
+    return jsonify({'id': image_ref[1].id, 'imageURL': public_url})
 
 @app.route('/product-images/<string:id>', methods=['PUT'])
 def update_product_image(id):
@@ -165,38 +173,67 @@ def delete_product_image(id):
         blob.delete()
     return 'Product image deleted', 200
 
-results = [
-    {"name": "McDonalds", "category": "Food", "result": "Negative"},
-    {"name": "KFC", "category": "Food", "result": "Negative"},
-    {"name": "Jolibee", "category": "Food", "result": "Positive"},
-    {"name": "Lays", "category": "Food", "result": "Negative"},
-    {"name": "Doritos", "category": "Food", "result": "Negative"},
-    {"name": "Moisturizer", "category": "Skincare", "result": "Positive"},
-    {"name": "Sunscreen", "category": "Skincare", "result": "Positive"},
-    {"name": "Toner", "category": "Skincare", "result": "Positive"},
-    {"name": "Cleanser", "category": "Skincare", "result": "Positive"},
-    {"name": "Serum", "category": "Skincare", "result": "Positive"},
-    {"name": "Iphone", "category": "Electronic", "result": "Negative"},
-    {"name": "Oppo", "category": "Electronic", "result": "Neutral"},
-    {"name": "Xiaomi", "category": "Electronic", "result": "Negative"},
-    {"name": "Vivo", "category": "Electronic", "result": "Positive"},
-    {"name": "Lenovo", "category": "Electronic", "result": "Negative"},
-    {"name": "HnM", "category": "Fashion", "result": "Negative"},
-    {"name": "Uniqlo", "category": "Fashion", "result": "Positive"},
-    {"name": "Lacoste", "category": "Fashion", "result": "Positive"},
-    {"name": "Adidas", "category": "Fashion", "result": "Positive"},
-    {"name": "Nike", "category": "Fashion", "result": "Positive"},
-]
+def fetch_tweets(product_name):
+    print("fetch_tweeets: ", product_name)
+    twitter_auth_token = os.getenv('TWITTER_AUTH_TOKEN')
+    limit = 15
+    current_date = datetime.now()
+    day_end = current_date.day
+    month_end = current_date.month
+    year_end = current_date.year
+    previous_date = current_date - timedelta(days=5)
+    day_start = previous_date.day
+    month_start = previous_date.month
+    year_start = previous_date.year
+    filename = f'updated_{product_name}_{previous_date.strftime("%Y-%m-%d")}.csv'
+
+    search_keyword = f'{product_name} lang:en since:{year_start}-{month_start:02d}-{day_start:02d} until:{year_end}-{month_end:02d}-{day_end:02d}'
+        
+    subprocess.run(f'npx --yes tweet-harvest@2.6.1 -o "{filename}" -s "{search_keyword}" --tab "LATEST" -l {limit} --token {twitter_auth_token}', shell=True)
+        
+    df = pd.read_csv(f'tweets-data/{filename}', usecols=['full_text'])
+    os.remove(f'tweets-data/{filename}')
+    return analyze(df)
+
+def scheduled_update_tweets():
+    with app.app_context():
+        try:
+            results_ref = db.collection('results')
+            docs = list(results_ref.stream())
+            if not docs:
+                print("No documents found in 'results' collection.")
+                return
+
+            random_doc = docs[np.random.randint(0, len(docs))]
+            product_name = random_doc.to_dict().get('name')
+            
+            # Fetch new tweet analysis result for the product
+            new_result = fetch_tweets(product_name)
+            
+            # Update the result attribute of the random document
+            random_doc.reference.update({'result': new_result})
+            print(f"Updated '{product_name}' result to: {new_result}")
+        except Exception as e:
+            print(f"Error: {e}")
 
 @app.route('/results', methods=['GET'])
 def get_results():
+    results_ref = db.collection('results')
+    docs = results_ref.stream()
+    results = [doc.to_dict() for doc in docs]
     return jsonify(results)
 
 @app.route('/results/<string:id>', methods=['GET'])
 def get_results_category(id):
-    filtered_results = [result for result in results if result['category'] == id]
+    results_ref = db.collection('results').where('category', '==', id)
+    docs = results_ref.stream()
+    filtered_results = [doc.to_dict() for doc in docs]
     return jsonify(filtered_results)
 
 if __name__ == '__main__':
+    loaded_model = loaded_model or load_model_from_gcs()
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(scheduled_update_tweets, 'cron', hour=1, minute=10)
+    scheduler.start()
     port = int(os.getenv('PORT', 3000))
     app.run(host='0.0.0.0', port=port)
